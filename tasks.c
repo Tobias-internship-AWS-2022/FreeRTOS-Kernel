@@ -1079,7 +1079,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                         &*&
                         subset(gOwners, gTasks) == true &*&
                         (uxCurrentPriority == 0
-                            ? length(gCells) == configNUM_CORES
+                            ? length(gCells) == configNUM_CORES + 1
                             : true
                         ) &*&
                         List_array_p(&pxReadyTasksLists, uxCurrentPriority, gPrefCellLists,

@@ -15,10 +15,10 @@ predicate readyLists_p(list<list<struct xLIST_ITEM*> > gCellLists,
                  gCellLists, gOwnerLists) &*&
     length(gCellLists) == length(gOwnerLists) 
     &*&
-    // List of priority 0 always contains the idle task and the end marker
-    // nothing else
-    length( nth(0, gCellLists) ) == configNUM_CORES &*&
-    length( nth(0, gOwnerLists) ) == configNUM_CORES;
+    // List of priority 0 always contains the idle tasks (configNUM_CORES many) 
+    // and the end marker nothing else
+    length( nth(0, gCellLists) ) == configNUM_CORES + 1 &*&
+    length( nth(0, gOwnerLists) ) == configNUM_CORES + 1;
 
 
 predicate List_array_p(List_t* array, int size, 
@@ -139,8 +139,8 @@ lemma void closeUnchanged_readyLists(list<list<struct xLIST_ITEM*> > cellLists,
 requires 
     configMAX_PRIORITIES == length(cellLists) &*&
     configMAX_PRIORITIES == length(ownerLists) &*&
-    length( nth(0, cellLists) ) == configNUM_CORES &*&
-    length( nth(0, ownerLists) ) == configNUM_CORES &*&
+    length( nth(0, cellLists) ) == configNUM_CORES +1 &*&
+    length( nth(0, ownerLists) ) == configNUM_CORES +1 &*&
     List_array_p(&pxReadyTasksLists, ?gIndex, ?gPrefCellLists, ?gPrefOwnerLists) &*&
     gIndex < length(cellLists) &*&
     xLIST(&pxReadyTasksLists + gIndex, ?gLen, _, _, ?gCells, ?gVals, ?gOwners) &*&
@@ -182,8 +182,8 @@ lemma void closeReordered_readyLists(list<list<struct xLIST_ITEM*> > cellLists,
 requires
     configMAX_PRIORITIES == length(cellLists) &*&
     configMAX_PRIORITIES == length(ownerLists) &*&
-    length( nth(0, cellLists) ) == configNUM_CORES &*&
-    length( nth(0, ownerLists) ) == configNUM_CORES &*&
+    length( nth(0, cellLists) ) == configNUM_CORES + 1 &*&
+    length( nth(0, ownerLists) ) == configNUM_CORES + 1 &*&
     List_array_p(&pxReadyTasksLists, ?gIndex, ?gPrefCellLists, ?gPrefOwnerLists) &*&
     gIndex < length(cellLists) &*&
     xLIST(&pxReadyTasksLists + gIndex, ?gLen, _, _, reorderedCells, _, reorderedOwners) &*&
@@ -214,7 +214,7 @@ ensures
     assert( List_array_p(&pxReadyTasksLists, configMAX_PRIORITIES, 
                          ?gReorderedCellLists, ?gReorderedOwnerLists) );
 
-    // Proving `length(nth(0, gReorderedCellLists)) == configNUM_CORES
+    // Proving `length(nth(0, gReorderedCellLists)) == configNUM_CORES + 1
     //          == length(nth(0, gReorderedCellLists))`
         if(gIndex == 0) {
             assert( nth(0, gReorderedCellLists) == reorderedCells );
@@ -228,8 +228,8 @@ ensures
             assert( nth(0, gReorderedOwnerLists) == nth(0, gPrefOwnerLists) );
             assert( nth(0, gPrefOwnerLists) == nth(0, ownerLists) );
         }
-    assert( length(nth(0, gReorderedCellLists)) == configNUM_CORES );
-    assert( length(nth(0, gReorderedOwnerLists)) == configNUM_CORES );
+    assert( length(nth(0, gReorderedCellLists)) == configNUM_CORES + 1 );
+    assert( length(nth(0, gReorderedOwnerLists)) == configNUM_CORES + 1 );
 
     close readyLists_p(gReorderedCellLists, gReorderedOwnerLists);
 
@@ -265,8 +265,8 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
             &*&
             length(gCellLists) == configMAX_PRIORITIES &*&
             length(gOwnerLists) == configMAX_PRIORITIES &*&
-            length(nth(0, gCellLists)) == configNUM_CORES &*&
-            length(nth(0, gOwnerLists)) == configNUM_CORES &*&
+            length(nth(0, gCellLists)) == configNUM_CORES + 1 &*&
+            length(nth(0, gOwnerLists)) == configNUM_CORES + 1 &*&
             0 <= gOffset &*& gOffset < length(gCellLists) 
         &*&
         // current ready list
