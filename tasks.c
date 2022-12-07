@@ -1360,6 +1360,12 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
                 //@ assert( readyLists_p(?gCellLists3, ?gOwnerLists3) );
                 //@ assert( forall(gOwnerLists3, (superset)(gTasks)) == true );
+
+                // TODO: Prove this assertion. If we assume it, the proof checks.
+                /*@ if( uxCurrentPriority == 0 ) {
+                    assert( xTaskScheduled != 0 );
+                }
+                @*/
             }
             else
             {
@@ -1402,8 +1408,6 @@ static void prvYieldForTask( TCB_t * pxTCB,
 #ifndef VERIFAST
             configASSERT( ( uxCurrentPriority > tskIDLE_PRIORITY ) || ( xTaskScheduled == pdTRUE ) );
 #endif /* VERIFAST */
-
-//@ assume(uxCurrentPriority > 0);
 
             uxCurrentPriority--;
 
