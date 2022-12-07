@@ -1087,8 +1087,9 @@ static void prvYieldForTask( TCB_t * pxTCB,
                         List_array_p(&pxReadyTasksLists + uxCurrentPriority + 1, 
                                      configMAX_PRIORITIES-uxCurrentPriority-1, gSufCellLists,
                                      gSufOwnerLists) &*&
-                        !gInnerLoopBroken;
-
+                        !gInnerLoopBroken
+                        &*&
+                        xTaskScheduled == 0;    // TODO: Can we replace `gInnerLoopBroken` by `xTaskScheduled != 0`?
                  @*/
                 {
                     TCB_t * pxTCB;
@@ -1364,6 +1365,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                 // TODO: Prove this assertion. If we assume it, the proof checks.
                 /*@ if( uxCurrentPriority == 0 ) {
                     assert( xTaskScheduled != 0 );
+//                    assume( xTaskScheduled != 0 );
                 }
                 @*/
             }
