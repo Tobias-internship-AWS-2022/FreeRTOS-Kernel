@@ -1067,6 +1067,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                         mem(pxTaskItem, gCells) == true &*&
                         xLIST(gReadyList, gSize, gIndex, gEnd, gCells, gVals, gOwners) &*&
                         distinct(gOwners) == true &*&
+                        gOwners == nth(uxCurrentPriority, gOwnerLists) &*&
                         gSize > 0 &*&
                         exists_in_taskISRLockInv_p(gTasks, ?gStates) &*&
                         length(gTasks) == length(gStates)
@@ -1094,7 +1095,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                                      gSufOwnerLists) 
                         &*&
                         idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
-                        gIdleTasks == nth(0, append(gPrefOwnerLists, cons(gOwners, gSufOwnerLists))) &*&
+                        gIdleTasks == nth(0, gOwnerLists) &*&
                         !gInnerLoopBroken
                         &*&
                         xTaskScheduled == 0;    // TODO: Can we replace `gInnerLoopBroken` by `xTaskScheduled != 0`?
