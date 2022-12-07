@@ -1009,6 +1009,8 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
             //@ assert( xLIST(gReadyList, ?gSize, ?gIndex, ?gEnd, ?gCells, ?gVals, ?gOwners) );
             //@ assert( mem(gOwners, gOwnerLists) == true );
+            //@ forall_mem(gOwners, gOwnerLists, distinct);
+            //@ assert( distinct(gOwners) == true );
 
             //@ open xLIST(gReadyList, _, _, _, _, _, _);
             //@ assert( length(gCells) == gReadyList->uxNumberOfItems + 1 );
@@ -1064,6 +1066,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                         pointer(&pxCurrentTCBs[coreID_f], gCurrentTCB) &*&
                         mem(pxTaskItem, gCells) == true &*&
                         xLIST(gReadyList, gSize, gIndex, gEnd, gCells, gVals, gOwners) &*&
+                        distinct(gOwners) == true &*&
                         gSize > 0 &*&
                         exists_in_taskISRLockInv_p(gTasks, ?gStates) &*&
                         length(gTasks) == length(gStates)
@@ -1088,7 +1091,10 @@ static void prvYieldForTask( TCB_t * pxTCB,
                                      gPrefOwnerLists) &*&
                         List_array_p(&pxReadyTasksLists + uxCurrentPriority + 1, 
                                      configMAX_PRIORITIES-uxCurrentPriority-1, gSufCellLists,
-                                     gSufOwnerLists) &*&
+                                     gSufOwnerLists) 
+                        &*&
+                        idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
+                        gIdleTasks == nth(0, append(gPrefOwnerLists, cons(gOwners, gSufOwnerLists))) &*&
                         !gInnerLoopBroken
                         &*&
                         xTaskScheduled == 0;    // TODO: Can we replace `gInnerLoopBroken` by `xTaskScheduled != 0`?
@@ -1208,6 +1214,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                             /*@ stopUpdate_foreach_readOnly_sharedSeg_TCB_IF_not_running
                                     (gCurrentTCB, gTasks, gTasks, gStates, gStates1);
                             @*/
+
                             //@ assert( foreach(gTasks, readOnly_sharedSeg_TCB_IF_not_running_p(gTasks, gStates1)) );
 
 
@@ -1235,7 +1242,6 @@ static void prvYieldForTask( TCB_t * pxTCB,
                             //@ assert( foreach(gTasks, readOnly_sharedSeg_TCB_p(gTasks, gStates2)) );
                             //@ assert( foreach(gTasks, readOnly_sharedSeg_TCB_IF_not_running_p(gTasks, gStates2)) );
 
-
                             pxCurrentTCBs[ xCoreID ] = pxTCB;
                             xTaskScheduled = pdTRUE;
 
@@ -1245,6 +1251,9 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
                             // Putting back first have of write permission to `pxTCB`
                                 //@ close [1/2]sharedSeg_TCB_p(pxTCB, _);
+                            
+                            //@ updateStopStart_idleTask(gIdleTask, gStates, gCurrentTCB, pxTCB, gStates2);
+                            //@ assert( idleTask_p(gIdleTask, coreID_f(), gTasks, gStates2, gIdleTasks) );
                         }
                     }
                     else if( pxTCB == pxCurrentTCBs[ xCoreID ] )
@@ -1287,6 +1296,9 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
                             //@ assert( foreach(gTasks, readOnly_sharedSeg_TCB_p(gTasks, gEquivStates)) );
                             //@ close [1/2]sharedSeg_TCB_p(pxTCB, _);
+
+                            //@ updateStart_idleTask(gIdleTask, gStates, gCurrentTCB, gEquivStates);
+                            //@ assert( idleTask_p(gIdleTask, coreID_f(), gTasks, gEquivStates, gIdleTasks) );
                         }
                     }
                     /*@
@@ -1326,10 +1338,10 @@ static void prvYieldForTask( TCB_t * pxTCB,
      *   loop.
      */
                         //@ assert( exists_in_taskISRLockInv_p(gTasks, ?gStates3) );
-                        /*@ close VF_reordeReadyList__ghost_args
+                        /*@ close VF_reorderReadyList__ghost_args
                                         (gTasks, gStates3, gCellLists, gOwnerLists, uxCurrentPriority);
                         @*/
-                        VF_reordeReadyList( pxReadyList, pxTaskItem);
+                        VF_reorderReadyList( pxReadyList, pxTaskItem);
 #else
                         uxListRemove( pxTaskItem );
                         vListInsertEnd( pxReadyList, pxTaskItem );

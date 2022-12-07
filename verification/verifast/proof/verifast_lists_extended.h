@@ -187,6 +187,16 @@ requires 0 <= n &*& n < length(xs);
 ensures xs == append( take(n, xs), cons(nth(n, xs), drop(n+1, xs)) );
 
 // TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void append_take_elem_drop_adds_elem<t>(int n, list<t> xs, 
+                                              t elem, list<t> xs2);
+requires 
+    0 <= n &*& n < length(xs) &*&
+    xs2 == append( take(n, xs), cons(elem, drop(n, xs)));
+ensures 
+    subset(cons(elem, xs), xs2) == true &*&
+    subset(xs2, cons(elem, xs)) == true;
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
 // Note: `listex.gh` contains lemma `forall_drop` but no corresponding 
 // `forall_take`.
 lemma void forall_take<t>(list<t> xs, fixpoint(t, bool) p, int i);
@@ -220,6 +230,11 @@ requires forall(xs, p) == true;
 ensures forall(remove_nth(n, xs), p) == true;
 
 // TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void remove_nth_index<t>(t x, list<t> xs);
+requires mem(x, xs) == true;
+ensures remove_nth(index_of(x, xs), xs) == remove(x, xs);
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
 lemma void nth_implies_mem<t>(int n, list<t> xs);
 requires 0 <= n &*& n < length(xs);
 ensures mem(nth(n, xs), xs) == true;
@@ -238,6 +253,34 @@ ensures subset(take(i, xs), xs) == true;
 lemma void subset_drop<t>(int i, list<t> xs);
 requires true;
 ensures subset(drop(i, xs), xs) == true;
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void append_remove_x_preserves_elems<t>(t x, list<t> xs);
+requires mem(x, xs) == true;
+ensures subset(append( remove(x, xs), cons(x, nil)), xs) == true &*&
+        subset(xs, append( remove(x, xs), cons(x, nil))) == true;
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void cons_remove_x_preserves_elems<t>(t x, list<t> xs);
+requires mem(x, xs) == true;
+ensures subset(cons(x, remove(x, xs)), xs) == true &*&
+        subset(xs, cons(x, remove(x, xs))) == true;
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void distinct_append_r<t>(t x, list<t> xs);
+requires distinct(xs) == true &*& mem(x, xs) == false;
+ensures  distinct(append(xs, cons(x, nil))) == true;
+
+// TODO: Can we prove this in VeriFast or do we have to axiomatise?
+lemma void distinct_take_elem_drop<t>(int n, list<t> xs,
+                                      t elem, list<t> xs2);
+requires   
+    distinct(xs) == true &*&
+    0 <= n &*& n < length(xs) &*&
+    xs2 == append(take(n, xs), append(cons(elem, nil), drop(n, xs))) &*&
+    mem(elem, xs) == false;
+ensures
+    distinct(xs2) == true;
 @*/
 
 

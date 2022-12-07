@@ -12,21 +12,21 @@ predicate readyLists_p(list<void*> gTasks,
                        list<list<struct xLIST_ITEM*> > gCellLists,
                        list<list<void*> > gOwnerLists) =
     length(gTasks) == length(gStates) &*&
+    length(gCellLists) == length(gOwnerLists) &*&
+    forall(gOwnerLists, distinct) == true &*&
     configMAX_PRIORITIES == length(gCellLists) &*&
     List_array_p(&pxReadyTasksLists, configMAX_PRIORITIES, 
-                 gCellLists, gOwnerLists) &*&
-    length(gCellLists) == length(gOwnerLists) 
+                 gCellLists, gOwnerLists)
+    &*&
+    // (IDLE) The ready list for priority level 0 contains an idle task for
+    // this core.
+        idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
+        gIdleTasks == nth(0, gOwnerLists)
     &*&
     // List of priority 0 always contains the idle tasks (configNUM_CORES many) 
     // and the end marker nothing else
     length( nth(0, gCellLists) ) == configNUM_CORES + 1 &*&
-    length( nth(0, gOwnerLists) ) == configNUM_CORES + 1
-    &*&
-    // (IDLE) The ready list for priority level 0 contains an idle task for
-    // this core.
-//        idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
-//        gIdleTasks == nth(0, gOwnerLists);
-    true;
+    length( gIdleTasks ) == configNUM_CORES + 1;
 
 
 predicate List_array_p(List_t* array, int size, 
@@ -137,7 +137,8 @@ predicate idleTask_p(TCB_t* t, int coreID,
                      list<void*> gIdleTasks) =
     0 <= coreID &*& coreID < configNUM_CORES &*&
     mem(t, gTasks) == true &*&
-    mem(t, gIdleTasks) == true
+    mem(t, gIdleTasks) == true &*&
+    length(gStates) == length(gTasks)
     &*&
     // The idle task for this core is either not running or running on this core.
     (nth(index_of(t, gTasks), gStates) == taskTASK_NOT_RUNNING ||
@@ -159,6 +160,7 @@ requires
     configMAX_PRIORITIES == length(ownerLists) &*&
     length( nth(0, cellLists) ) == configNUM_CORES +1 &*&
     length( nth(0, ownerLists) ) == configNUM_CORES +1 &*&
+    forall(ownerLists, distinct) == true &*&
     List_array_p(&pxReadyTasksLists, ?gIndex, ?gPrefCellLists, ?gPrefOwnerLists) &*&
     gIndex < length(cellLists) &*&
     xLIST(&pxReadyTasksLists + gIndex, ?gLen, _, _, ?gCells, ?gVals, ?gOwners) &*&
@@ -171,7 +173,8 @@ requires
     gPrefCellLists == take(gIndex, cellLists) &*&
     gSufCellLists == drop(gIndex+1, cellLists) &*&
     gPrefOwnerLists == take(gIndex, ownerLists) &*&
-    gSufOwnerLists == drop(gIndex+1, ownerLists);
+    gSufOwnerLists == drop(gIndex+1, ownerLists) &*&
+    idleTask_p(?gIdleTask, coreID_f(), tasks, states, nth(0, ownerLists));
 ensures
     readyLists_p(tasks, states, cellLists, ownerLists);
 {
@@ -204,12 +207,14 @@ requires
     configMAX_PRIORITIES == length(ownerLists) &*&
     length( nth(0, cellLists) ) == configNUM_CORES + 1 &*&
     length( nth(0, ownerLists) ) == configNUM_CORES + 1 &*&
+    forall(ownerLists, distinct) == true &*&
     List_array_p(&pxReadyTasksLists, ?gIndex, ?gPrefCellLists, ?gPrefOwnerLists) &*&
     gIndex < length(cellLists) &*&
     xLIST(&pxReadyTasksLists + gIndex, ?gLen, _, _, reorderedCells, _, reorderedOwners) &*&
     gLen < INT_MAX &*&
     length(reorderedCells) == length(nth(gIndex, cellLists)) &*&
     length(reorderedOwners) == length(nth(gIndex, ownerLists)) &*&
+    distinct(reorderedOwners) == true &*&
     pointer_within_limits(&pxReadyTasksLists + gIndex) == true &*&
     List_array_p(&pxReadyTasksLists + gIndex + 1, configMAX_PRIORITIES - gIndex - 1,
                  ?gSufCellLists, ?gSufOwnerLists) &*&
@@ -217,8 +222,16 @@ requires
     gSufCellLists == drop(gIndex+1, cellLists) &*&
     gPrefOwnerLists == take(gIndex, ownerLists) &*&
     gSufOwnerLists == drop(gIndex+1, ownerLists) &*&
-    forall(ownerLists, (superset)(tasks)) == true &*&
-    forall(reorderedOwners, (mem_list_elem)(tasks)) == true;
+    forall(ownerLists, (superset)(tasks)) == true 
+    &*&
+//    forall(reorderedOwners, (mem_list_elem)(tasks)) == true &*&
+    // `reorderedOwners` and original owner list `nth(gIndex, ownerLists)`
+    // contain same elements 
+        subset(reorderedOwners, nth(gIndex, ownerLists)) == true &*&
+        subset(nth(gIndex, ownerLists), reorderedOwners) == true
+    &*&
+    subset(nth(gIndex, ownerLists), tasks) == true &*&
+    idleTask_p(?gIdleTask, coreID_f(), tasks, states, nth(0, ownerLists));
 ensures
     readyLists_p(tasks, states, ?gReorderedCellLists, ?gReorderedOwnerLists) &*&
     forall(gReorderedOwnerLists, (superset)(tasks)) == true;
@@ -233,6 +246,18 @@ ensures
     List_array_join(&pxReadyTasksLists);
     assert( List_array_p(&pxReadyTasksLists, configMAX_PRIORITIES, 
                          ?gReorderedCellLists, ?gReorderedOwnerLists) );
+    
+    // Proving that joining preserves distinctness:
+        assert( gReorderedOwnerLists == append(gPrefOwnerLists, 
+                                               cons(reorderedOwners, gSufOwnerLists)) );
+        forall_drop(ownerLists, distinct, gIndex+1);
+        assert( forall(gSufOwnerLists, distinct) == true );
+        forall_take(ownerLists, distinct, gIndex);
+        assert( forall(gPrefOwnerLists, distinct) == true );
+        assert( forall(cons(reorderedOwners, gSufOwnerLists), distinct) == true );
+        forall_append(gPrefOwnerLists, cons(reorderedOwners, gSufOwnerLists), distinct);
+    assert( forall(gReorderedOwnerLists, distinct) == true );
+
 
     // Proving `length(nth(0, gReorderedCellLists)) == configNUM_CORES + 1
     //          == length(nth(0, gReorderedCellLists))`
@@ -251,27 +276,40 @@ ensures
     assert( length(nth(0, gReorderedCellLists)) == configNUM_CORES + 1 );
     assert( length(nth(0, gReorderedOwnerLists)) == configNUM_CORES + 1 );
 
+    open idleTask_p(gIdleTask, coreID_f(), tasks, states, ?gIdleTasks);
+    list<void*> gReorderedIdleTasks = nth(0, gReorderedOwnerLists);
+
+    // Proving `gIdleTask ∈ gReorderedIdleTasks
+        mem_subset(gIdleTask, gIdleTasks, gReorderedIdleTasks);
+    assert( mem(gIdleTask, gReorderedIdleTasks) == true );
+
+    close idleTask_p(gIdleTask, coreID_f(), tasks, states, gReorderedIdleTasks);
     close readyLists_p(tasks, states, gReorderedCellLists, gReorderedOwnerLists);
 
 
-    // Below we prove `forall(gReorderedOwnerLists, (superset)(tasks)) == true`
-    forall_take(ownerLists, (superset)(tasks), gIndex);
-    forall_drop(ownerLists, (superset)(tasks), gIndex+1);
-    assert( forall(gPrefOwnerLists, (superset)(tasks)) == true );
-    assert( forall(gSufOwnerLists, (superset)(tasks)) == true );
-    forall_mem_implies_superset(tasks, reorderedOwners);
+    // Proving `tasks ⊇ reorderedOwners`:
+        subset_trans(reorderedOwners, nth(gIndex, ownerLists), tasks);
+        assert( subset(reorderedOwners, tasks) == true );
     assert( superset(tasks, reorderedOwners) == true );
-    assert( forall(singleton(reorderedOwners), (superset)(tasks)) == true );
-    assert( forall(cons(reorderedOwners, gSufOwnerLists), (superset)(tasks)) == true );
 
-    forall_append(gPrefOwnerLists, cons(reorderedOwners, gSufOwnerLists),
-                  (superset)(tasks));
+    // Proving `∀l ∈ gReorderedOwnerLists. tasks ⊇ l`:
+        forall_take(ownerLists, (superset)(tasks), gIndex);
+        forall_drop(ownerLists, (superset)(tasks), gIndex+1);
+        assert( forall(gPrefOwnerLists, (superset)(tasks)) == true );
+        assert( forall(gSufOwnerLists, (superset)(tasks)) == true );
+        assert( superset(tasks, reorderedOwners) == true );
+        assert( forall(singleton(reorderedOwners), (superset)(tasks)) == true );
+        assert( forall(cons(reorderedOwners, gSufOwnerLists), (superset)(tasks)) == true );
+
+        forall_append(gPrefOwnerLists, cons(reorderedOwners, gSufOwnerLists),
+                    (superset)(tasks));
+    assert( forall(gReorderedOwnerLists, (superset)(tasks)) == true );
 }
 @*/
 
 
 /*@
-predicate VF_reordeReadyList__ghost_args(list<void*> tasks,
+predicate VF_reorderReadyList__ghost_args(list<void*> tasks,
                                          list<TaskRunning_t> states,
                                          list<list<struct xLIST_ITEM*> > cellLists,
                                          list<list<void*> > ownerLists,
@@ -279,10 +317,10 @@ predicate VF_reordeReadyList__ghost_args(list<void*> tasks,
     = true;
 @*/
 
-void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
+void VF_reorderReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
 /*@ requires
         // ghost arguments
-            VF_reordeReadyList__ghost_args(?gTasks, ?gStates,
+            VF_reorderReadyList__ghost_args(?gTasks, ?gStates,
                                            ?gCellLists, ?gOwnerLists, ?gOffset)
             &*&
             length(gTasks) == length(gStates) &*&
@@ -290,6 +328,7 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
             length(gOwnerLists) == configMAX_PRIORITIES &*&
             length(nth(0, gCellLists)) == configNUM_CORES + 1 &*&
             length(nth(0, gOwnerLists)) == configNUM_CORES + 1 &*&
+            forall(gOwnerLists, distinct) == true &*&
             0 <= gOffset &*& gOffset < length(gCellLists) 
         &*&
         // current ready list
@@ -300,7 +339,10 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
             gEnd != pxTaskItem &*&
             mem(pxTaskItem, gCells) == true &*&
             gCells == nth(gOffset, gCellLists) &*&
-            gOwners == nth(gOffset, gOwnerLists)
+            gOwners == nth(gOffset, gOwnerLists) &*&
+            distinct(gOwners) == true &*&
+            idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
+            gIdleTasks == nth(0, gOwnerLists)
         &*&
         // prefix and suffix of ready lists array
             List_array_p(&pxReadyTasksLists, gOffset, ?gPrefCellLists, ?gPrefOwnerLists) &*&
@@ -322,7 +364,7 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
         forall(gReorderedOwnerLists, (superset)(gTasks)) == true;
  @*/
 {
-    //@ open VF_reordeReadyList__ghost_args(_, _, _, _, _);
+    //@ open VF_reorderReadyList__ghost_args(_, _, _, _, _);
 
     // Proving `∀o ∈ gOwners. o ∈ gTasks`
         //@ forall_mem(gOwners, gOwnerLists, (superset)(gTasks));
@@ -340,6 +382,30 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
     uxListRemove( pxTaskItem );
     //@ assert( xLIST(pxReadyList, gSize-1, ?gIndex2, gEnd, ?gCells2, ?gVals2, ?gOwners2) );
     //@ assert( xLIST_ITEM(pxTaskItem, _, _, _, ?gTaskItem_owner, _) );
+
+    // Proving `gOwners2 == remove(gTaskItem_owner, gOwners)`:
+        //@ assert( gOwners2 == remove_nth(index_of(pxTaskItem, gCells), gOwners) );
+        //@ assert( gTaskItem_owner == nth(index_of(pxTaskItem, gCells), gOwners) );
+        //@ nth_index_of(index_of(pxTaskItem, gCells), gOwners);
+        //@ remove_nth_index(gTaskItem_owner, gOwners);
+        //@ assert( index_of(pxTaskItem, gCells) == index_of(gTaskItem_owner, gOwners) );
+    //@ assert( gOwners2 == remove(gTaskItem_owner, gOwners) );
+
+    // Proving `gOwners2 ⊆ gOwners`:
+        //@ remove_result_subset(gTaskItem_owner, gOwners);
+    //@ assert( subset(gOwners2, gOwners) == true );
+
+    //@ distinct_remove(gTaskItem_owner, gOwners);
+    //@ assert( distinct(gOwners2) == true );
+
+    // gTaskItem_owner ∉ gOwners2
+    //@ distinct_mem_remove(gTaskItem_owner, gOwners);
+    //@ assert( mem(gTaskItem_owner, gOwners2) == false);
+
+
+    // TODO: Which of the subproofs below are still necessary?
+    // --------------------------------------------------------
+
 
     // Proving `length(gCell2) == length(gOwners2) == gSize` and `gIndex2 ∈ gCells2`:
         //@ open xLIST(pxReadyList, gSize-1, gIndex2, gEnd, gCells2, gVals2, gOwners2);
@@ -368,47 +434,75 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
     vListInsertEnd( pxReadyList, pxTaskItem );
     //@ assert( xLIST(pxReadyList, gSize, ?gIndex3, gEnd, ?gCells3, ?gVals3, ?gOwners3) );
 
-    // Proving `gOwners3 ⊆ gTasks` and `length(gOwners3) == length(gOwners)`:
-    // We must handle the case split introduced by postcondition of `vListInsertEnd`.
+
+    // Proving `gOwners3 ⊆ gOwners ∧ gOwners ⊆ gOwners3` and
+    //         `distinct(gOwners3) == true`:
+    // We must handle the case split introduced by the postcondition of `vListInsertEnd`.
         /*@
         if( gIndex2 == gEnd ) {
-            assert( gCells3 == append(gCells2, singleton(pxTaskItem)) );
-            assert( gOwners3 == append(gOwners2, singleton(gTaskItem_owner)) );
+            // postcondition of `vListInsertEnd`:
+                assert( gCells3 == append(gCells2, singleton(pxTaskItem)) );
+                assert( gOwners3 == append(gOwners2, singleton(gTaskItem_owner)) );
+
+            assert( gOwners2 == remove(gTaskItem_owner, gOwners) );
+            assert( gOwners3 == append( remove(gTaskItem_owner, gOwners),
+                                        singleton(gTaskItem_owner) ) );
+
+            append_remove_x_preserves_elems(gTaskItem_owner, gOwners);
+            assert( subset(gOwners3, gOwners) == true );
+            assert( subset(gOwners, gOwners3) == true );
             
-            assert( subset(singleton(gTaskItem_owner), gTasks) == true );
-            subset_append(gOwners2, singleton(gTaskItem_owner), gTasks);
+            distinct_append_r(gTaskItem_owner, gOwners2);
+            assert( distinct(gOwners3) == true );
         } else {
-            int i = index_of(gIndex2, gCells2);
-            assert( gCells3 == append(take(i, gCells2),
-                                      append(singleton(pxTaskItem), 
-                                             drop(i, gCells2))) );
-            list<void*> ot = append(singleton(gTaskItem_owner), drop(i, gOwners2));
-            assert( gOwners3 == append(take(i, gOwners2), ot) );
+            // postcondition of `vListInsertEnd`:
+                int i = index_of(gIndex2, gCells2);
+                assert( gCells3 == append(take(i, gCells2),
+                                        append(singleton(pxTaskItem), 
+                                                drop(i, gCells2))) );
+                list<void*> ot = append(singleton(gTaskItem_owner), drop(i, gOwners2));
+                assert( gOwners3 == append(take(i, gOwners2), ot) );
             
+            assert( gOwners3 == append(take(i, remove(gTaskItem_owner, gOwners)), 
+                                        append(singleton(gTaskItem_owner), 
+                                                drop(i, remove(gTaskItem_owner, gOwners)))
+                                        )
+                    );
             
-            // Proving `take(i, gOwners2) ⊆ gTasks`:
-                subset_take(i, gOwners2);
-                assert( subset(take(i, gOwners2), gOwners2) == true );
-                assert( subset(gOwners2, gTasks) == true );
-                subset_trans(take(i, gOwners2), gOwners2, gTasks);
-            assert( subset(take(i, gOwners2), gTasks) == true );
+            // Proving  `{TaskItem_owner} u gOwners2 ⊆ gOwners3` and
+            //          `gOwners3 ⊆ {TaskItem_owner} u gOwners2`:
+            mem_index_of(gIndex2, gCells2);
+            append_take_elem_drop_adds_elem(i, gOwners2, gTaskItem_owner, gOwners3);
+            assert( subset( cons(gTaskItem_owner, gOwners2), gOwners3) == true );
+            assert( subset( gOwners3, cons(gTaskItem_owner, gOwners2)) == true );
 
-            // Proving `drop(i, gOwners2) ⊆ gTasks`:
-                subset_drop(i, gOwners2);
-                subset_trans(drop(i, gOwners2), gOwners2, gTasks);
-            assert( subset(drop(i, gOwners2), gTasks) == true );
-            
-            // Proving `gOwners3 ⊆ gTasks`:
-                subset_append(singleton(gTaskItem_owner), drop(i, gOwners2), gTasks);
-                subset_append(take(i, gOwners2), ot, gTasks);
-            assert( subset(gOwners3, gTasks) == true );        
+            // {gTaskItem_owner} u gOwners2 ⊆ gOwners
+            assert( subset(cons(gTaskItem_owner, gOwners2), gOwners) == true );
 
-            // Proving `length(gOwners3) == length(gOwners)`:
-                mem_index_of(gIndex2, gCells2);
-                append_take_nth_drop(i, gOwners2);
-            assert( length(gOwners3) == gSize+1 );
+            // Proving `gOwners ⊆ {TaskItem_owner} u gOwners2`:
+                cons_remove_x_preserves_elems(gTaskItem_owner, gOwners);
+            assert( subset(gOwners, cons(gTaskItem_owner, gOwners2)) == true );
+            
+            // Proving `gOwners ⊆ {TaskItem_owner} u gOwners2 ⊆ gOwners3`
+                subset_trans(gOwners, cons(gTaskItem_owner, gOwners2), gOwners3);
+            assert( subset(gOwners, gOwners3) == true );
+
+            // Proving `gOwners3 ⊆ {gTaskItem_owner} u gOwners2 ⊆ gOwners`:
+                subset_trans(gOwners3, cons(gTaskItem_owner, gOwners2), gOwners);
+            assert( subset(gOwners3, gOwners) == true );
+
+            // Proving `distinct(gOwners2) == true`:
+                distinct_take_elem_drop(i, gOwners2, gTaskItem_owner, gOwners3);
+            assert( distinct(gOwners3) == true );
         }
         @*/
+    //@ assert( subset(gOwners3, gOwners) == true );
+    //@ assert( subset(gOwners, gOwners3) == true );
+    //@ assert( distinct(gOwners3) == true );
+
+
+    // Proving `gOwners3 ⊆ gTasks` and `length(gOwners3) == length(gOwners)`:
+        //@ subset_trans(gOwners3, gOwners, gTasks);
     //@ assert( subset(gOwners3, gTasks) == true );
     //@ assert( length(gOwners3) == length(gOwners) );
 
@@ -424,4 +518,92 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
     //@ assert( length(gReorderedOwnerLists) == length(gOwnerLists) );
     //@ assert( length(gReorderedCellLists) == length(gReorderedOwnerLists) );
 }
+
+// -------------------------------------------------------------------------
+// Lemmas to update the idle task list predicate in different scenarios.
+/*@
+lemma void updateStop_idleTask(TCB_t* idleTask, 
+                               list<TaskRunning_t> states,
+                               TCB_t* stoppedTask,
+                               list<TaskRunning_t> states1)
+requires 
+    idleTask_p(idleTask, coreID_f(), ?gTasks, states, ?gIdleTasks) &*&
+    states1 == update(index_of(stoppedTask, gTasks), taskTASK_NOT_RUNNING, states) &*&
+    mem(stoppedTask, gTasks) == true;
+ensures
+    idleTask_p(idleTask, coreID_f(), gTasks, states1, gIdleTasks);
+{
+    open idleTask_p(idleTask, coreID_f(), gTasks, states, gIdleTasks);
+
+    int idxS = index_of(stoppedTask, gTasks);
+    int idxI = index_of(idleTask, gTasks);
+
+    if( stoppedTask == idleTask ) {
+        mem_index_of(stoppedTask, gTasks);
+        nth_update(idxS, idxS, taskTASK_NOT_RUNNING, states);
+        assert( nth(idxS, states1) == taskTASK_NOT_RUNNING );
+        assert( nth(idxS, states1) == taskTASK_NOT_RUNNING );
+    } else {
+        mem_index_of(stoppedTask, gTasks);
+        index_of_different(stoppedTask, idleTask, gTasks);
+        nth_update(idxI, idxS, taskTASK_NOT_RUNNING, states);
+        assert( nth(idxI, states1) == nth(idxI, states) );
+    }
+
+    close idleTask_p(idleTask, coreID_f(), gTasks, states1, gIdleTasks);
+}
+
+lemma void updateStart_idleTask(TCB_t* idleTask, 
+                               list<TaskRunning_t> states1,
+                               TCB_t* startedTask,
+                               list<TaskRunning_t> states2)
+requires 
+    idleTask_p(idleTask, coreID_f(), ?gTasks, states1, ?gIdleTasks) &*&
+    states2 == update(index_of(startedTask, gTasks), coreID_f(), states1) &*&
+    mem(startedTask, gTasks) == true;
+ensures
+    idleTask_p(idleTask, coreID_f(), gTasks, states2, gIdleTasks);
+{
+    open idleTask_p(idleTask, coreID_f(), gTasks, states1, gIdleTasks);
+
+    int idxS = index_of(startedTask, gTasks);
+    int idxI = index_of(idleTask, gTasks);
+
+    if( startedTask == idleTask ) {
+        mem_index_of(startedTask, gTasks);
+        nth_update(idxS, idxS, coreID_f(), states1);
+        assert( nth(idxS, states2) == coreID_f() );
+        assert( nth(idxS, states2) == coreID_f() );
+    } else {
+        mem_index_of(startedTask, gTasks);
+        index_of_different(startedTask, idleTask, gTasks);
+        nth_update(idxI, idxS, coreID_f(), states1);
+        assert( nth(idxI, states2) == nth(idxI, states1) );
+    }
+
+    close idleTask_p(idleTask, coreID_f(), gTasks, states2, gIdleTasks);
+}
+
+lemma void updateStopStart_idleTask(TCB_t* idleTask, 
+                               list<TaskRunning_t> states,
+                               TCB_t* stoppedTask,
+                               TCB_t* startedTask,
+                               list<TaskRunning_t> states2)
+requires 
+    idleTask_p(idleTask, coreID_f(), ?gTasks, states, ?gIdleTasks) &*&
+    states2 == update(index_of(startedTask, gTasks), coreID_f(),
+                      update(index_of(stoppedTask, gTasks), taskTASK_NOT_RUNNING, 
+                             states))
+    &*&
+    mem(stoppedTask, gTasks) == true &*&
+    mem(startedTask, gTasks) == true;
+ensures
+    idleTask_p(idleTask, coreID_f(), gTasks, states2, gIdleTasks);
+{
+    list<TaskRunning_t> states1 = 
+        update(index_of(stoppedTask, gTasks), taskTASK_NOT_RUNNING, states);
+    updateStop_idleTask(idleTask, states, stoppedTask, states1);
+    updateStart_idleTask(idleTask, states1, startedTask, states2);
+}
+@*/
 #endif /* READY_LIST_PREDICATES_H */
