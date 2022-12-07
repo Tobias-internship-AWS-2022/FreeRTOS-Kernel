@@ -997,7 +997,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
             //@ assert( integer_((void*) &uxTopReadyPriority, sizeof(UBaseType_t), false, gTopReadyPriority) );
             //@ assert( gTopReadyPriority == uxTopReadyPriority);
 
-            //@ open readyLists_p(?gCellLists, ?gOwnerLists);
+            //@ open readyLists_p(gTasks, gStates0, ?gCellLists, ?gOwnerLists);
             //@ assert( List_array_p(&pxReadyTasksLists, configMAX_PRIORITIES, gCellLists, gOwnerLists) );
             //@ List_array_p_index_within_limits(&pxReadyTasksLists, uxCurrentPriority);
             //@ List_array_split(pxReadyTasksLists, uxCurrentPriority);
@@ -1065,7 +1065,8 @@ static void prvYieldForTask( TCB_t * pxTCB,
                         mem(pxTaskItem, gCells) == true &*&
                         xLIST(gReadyList, gSize, gIndex, gEnd, gCells, gVals, gOwners) &*&
                         gSize > 0 &*&
-                        exists_in_taskISRLockInv_p(gTasks, ?gStates)
+                        exists_in_taskISRLockInv_p(gTasks, ?gStates) &*&
+                        length(gTasks) == length(gStates)
                         &*&
                         // Read permissions for every task
                             foreach(gTasks, readOnly_sharedSeg_TCB_p(gTasks, gStates)) 
@@ -1324,15 +1325,16 @@ static void prvYieldForTask( TCB_t * pxTCB,
      *   That is, makes it easier to ensure that we don't run into an infinite auto lemma call
      *   loop.
      */
+                        //@ assert( exists_in_taskISRLockInv_p(gTasks, ?gStates3) );
                         /*@ close VF_reordeReadyList__ghost_args
-                                        (gTasks, gCellLists, gOwnerLists, uxCurrentPriority);
+                                        (gTasks, gStates3, gCellLists, gOwnerLists, uxCurrentPriority);
                         @*/
                         VF_reordeReadyList( pxReadyList, pxTaskItem);
 #else
                         uxListRemove( pxTaskItem );
                         vListInsertEnd( pxReadyList, pxTaskItem );
 #endif /* VERIFAST */
-                        //@ assert( readyLists_p(?gReorderedCellLists, ?gReorderedOwnerLists) );
+                        //@ assert( readyLists_p(gTasks, gStates3, ?gReorderedCellLists, ?gReorderedOwnerLists) );
                         //@ assert( forall(gReorderedOwnerLists, (superset)(gTasks)) == true );
                         //@ gInnerLoopBroken = true;
                         break;
@@ -1352,15 +1354,17 @@ static void prvYieldForTask( TCB_t * pxTCB,
                  */
                 /*@
                 if( !gInnerLoopBroken ) {
-                    closeUnchanged_readyLists(gCellLists, gOwnerLists);
+                    assert( exists_in_taskISRLockInv_p(gTasks, ?gStates3) );
+                    closeUnchanged_readyLists(gTasks, gStates3, gCellLists, gOwnerLists);
 
-                    assert( readyLists_p(gCellLists, gOwnerLists) );
+                    assert( readyLists_p(gTasks, gStates3, gCellLists, gOwnerLists) );
                     assert( forall(gOwnerLists, (superset)(gTasks)) == true );
                 }
                 @*/
     
 
-                //@ assert( readyLists_p(?gCellLists3, ?gOwnerLists3) );
+                //@ assert( exists_in_taskISRLockInv_p(gTasks, ?gStates3) );
+                //@ assert( readyLists_p(gTasks, gStates3, ?gCellLists3, ?gOwnerLists3) );
                 //@ assert( forall(gOwnerLists3, (superset)(gTasks)) == true );
 
                 // TODO: Prove this assertion. If we assume it, the proof checks.
@@ -1384,7 +1388,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
                 //@ close xLIST(gReadyList, gSize, gIndex, gEnd, gCells, gVals, gOwners);
 
-                //@ closeUnchanged_readyLists(gCellLists, gOwnerLists);
+                //@ closeUnchanged_readyLists(gTasks, gStates0, gCellLists, gOwnerLists);
             }
 
             /* This function can get called by vTaskSuspend() before the scheduler is started.
@@ -1415,24 +1419,8 @@ static void prvYieldForTask( TCB_t * pxTCB,
 
             uxCurrentPriority--;
 
-            // @ close xLIST(gReadyList, gSize, gIndex, gEnd, gCells, gVals, gOwners);
-            // @ assert( xLIST(gReadyList, ?gReadyListSize, _, _, gCells, gVals, gOwners) );
-            // @ assert( gReadyListSize == gSize );
-            // @ List_array_join(&pxReadyTasksLists);
-            // @ assert( List_array_p(&pxReadyTasksLists, ?gSize2, ?gCellLists2, ?gOwnerLists2) );
-            // @ assert( gPrefCellLists == take(uxCurrentPriority, gCellLists) );
-            // @ assert( gSufCellLists == drop(uxCurrentPriority + 1, gCellLists) );
-            // @ assert( gCells == nth(uxCurrentPriority, gCellLists) );
-            // @ assert( gCellLists2 == append(gPrefCellLists, cons(gCells, gSufCellLists)) );
-            // @ append_take_nth_drop(uxCurrentPriority, gCellLists);
-            // @ append_take_nth_drop(uxCurrentPriority, gOwnerLists);
-
-
-//            //@ assert( List_array_p(&pxReadyTasksLists, ?gSize2, ?gCellLists2, ?gOwnerLists2) );
-
-
             //@ assert( exists_in_taskISRLockInv_p(gTasks, ?gStates) );
-  //          //@ close readyLists_p(gCellLists2, gOwnerLists2);
+            //@ assert( readyLists_p(gTasks, gStates, _, _) );
             //@ close _taskISRLockInv_p(uxTopReadyPriority);
         }   // outer loop end
 

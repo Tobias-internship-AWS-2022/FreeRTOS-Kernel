@@ -2,14 +2,16 @@
 #define READY_LIST_PREDICATES_H
 
 #include "single_core_proofs/scp_list_predicates.h"
-
-
+#include "verifast_task_running_states.h"
 #include "verifast_lists_extended.h"
 
 
 /*@
-predicate readyLists_p(list<list<struct xLIST_ITEM*> > gCellLists,
+predicate readyLists_p(list<void*> gTasks,
+                       list<TaskRunning_t> gStates,
+                       list<list<struct xLIST_ITEM*> > gCellLists,
                        list<list<void*> > gOwnerLists) =
+    length(gTasks) == length(gStates) &*&
     configMAX_PRIORITIES == length(gCellLists) &*&
     List_array_p(&pxReadyTasksLists, configMAX_PRIORITIES, 
                  gCellLists, gOwnerLists) &*&
@@ -18,7 +20,13 @@ predicate readyLists_p(list<list<struct xLIST_ITEM*> > gCellLists,
     // List of priority 0 always contains the idle tasks (configNUM_CORES many) 
     // and the end marker nothing else
     length( nth(0, gCellLists) ) == configNUM_CORES + 1 &*&
-    length( nth(0, gOwnerLists) ) == configNUM_CORES + 1;
+    length( nth(0, gOwnerLists) ) == configNUM_CORES + 1
+    &*&
+    // (IDLE) The ready list for priority level 0 contains an idle task for
+    // this core.
+//        idleTask_p(?gIdleTask, coreID_f(), gTasks, gStates, ?gIdleTasks) &*&
+//        gIdleTasks == nth(0, gOwnerLists);
+    true;
 
 
 predicate List_array_p(List_t* array, int size, 
@@ -108,13 +116,7 @@ ensures
                        append(gPrefCellLists, cons(gCells, gSufCellLists)),
                        append(gPrefOwnerLists, cons(gOwners, gSufOwnerLists)));
 }
-@*/
 
-
-
-
-
-/*@
 lemma void List_array_p_index_within_limits(List_t* array, int index)
 requires List_array_p(array, ?gSize, ?gCellLists, ?gOwnerLists) &*&
          0 <= index &*& index < gSize;
@@ -127,16 +129,32 @@ ensures List_array_p(array, gSize, gCellLists, gOwnerLists) &*&
     }
     close List_array_p(array, gSize, gCellLists, gOwnerLists);
 }
-@*/
 
+
+predicate idleTask_p(TCB_t* t, int coreID, 
+                     list<void*> gTasks, 
+                     list<TaskRunning_t> gStates,
+                     list<void*> gIdleTasks) =
+    0 <= coreID &*& coreID < configNUM_CORES &*&
+    mem(t, gTasks) == true &*&
+    mem(t, gIdleTasks) == true
+    &*&
+    // The idle task for this core is either not running or running on this core.
+    (nth(index_of(t, gTasks), gStates) == taskTASK_NOT_RUNNING ||
+        nth(index_of(t, gTasks), gStates) == coreID
+    );
+@*/
 
 
 // -------------------------------------------------------------------------
 // Lemmas to close the ready list predicate in different scenarios.
 /*@
-lemma void closeUnchanged_readyLists(list<list<struct xLIST_ITEM*> > cellLists,
+lemma void closeUnchanged_readyLists(list<void*> tasks,
+                                     list<TaskRunning_t> states,
+                                     list<list<struct xLIST_ITEM*> > cellLists,
                                      list<list<void*> > ownerLists)
 requires 
+    length(tasks) == length(states) &*&
     configMAX_PRIORITIES == length(cellLists) &*&
     configMAX_PRIORITIES == length(ownerLists) &*&
     length( nth(0, cellLists) ) == configNUM_CORES +1 &*&
@@ -155,7 +173,7 @@ requires
     gPrefOwnerLists == take(gIndex, ownerLists) &*&
     gSufOwnerLists == drop(gIndex+1, ownerLists);
 ensures
-    readyLists_p(cellLists, ownerLists);
+    readyLists_p(tasks, states, cellLists, ownerLists);
 {
     // Prove `0 <= gIndex`:
         open List_array_p(&pxReadyTasksLists, gIndex, gPrefCellLists, gPrefOwnerLists);
@@ -171,15 +189,17 @@ ensures
     assert( gCellLists2 == cellLists );
     assert( gOwnerLists2 == ownerLists );
 
-    close readyLists_p(cellLists, ownerLists);
+    close readyLists_p(tasks, states, cellLists, ownerLists);
 }
 
-lemma void closeReordered_readyLists(list<list<struct xLIST_ITEM*> > cellLists,
+lemma void closeReordered_readyLists(list<void*> tasks, 
+                                     list<TaskRunning_t> states,
+                                     list<list<struct xLIST_ITEM*> > cellLists,
                                      list<list<void*> > ownerLists,
                                      list<struct xLIST_ITEM*> reorderedCells,
-                                     list<void*> reorderedOwners,
-                                     list<void*> tasks)
+                                     list<void*> reorderedOwners)
 requires
+    length(tasks) == length(states) &*&
     configMAX_PRIORITIES == length(cellLists) &*&
     configMAX_PRIORITIES == length(ownerLists) &*&
     length( nth(0, cellLists) ) == configNUM_CORES + 1 &*&
@@ -200,7 +220,7 @@ requires
     forall(ownerLists, (superset)(tasks)) == true &*&
     forall(reorderedOwners, (mem_list_elem)(tasks)) == true;
 ensures
-    readyLists_p(?gReorderedCellLists, ?gReorderedOwnerLists) &*&
+    readyLists_p(tasks, states, ?gReorderedCellLists, ?gReorderedOwnerLists) &*&
     forall(gReorderedOwnerLists, (superset)(tasks)) == true;
 {
     // Prove that `gIndex != 0 -> gIndex > 0`
@@ -231,7 +251,7 @@ ensures
     assert( length(nth(0, gReorderedCellLists)) == configNUM_CORES + 1 );
     assert( length(nth(0, gReorderedOwnerLists)) == configNUM_CORES + 1 );
 
-    close readyLists_p(gReorderedCellLists, gReorderedOwnerLists);
+    close readyLists_p(tasks, states, gReorderedCellLists, gReorderedOwnerLists);
 
 
     // Below we prove `forall(gReorderedOwnerLists, (superset)(tasks)) == true`
@@ -252,6 +272,7 @@ ensures
 
 /*@
 predicate VF_reordeReadyList__ghost_args(list<void*> tasks,
+                                         list<TaskRunning_t> states,
                                          list<list<struct xLIST_ITEM*> > cellLists,
                                          list<list<void*> > ownerLists,
                                          int offset) 
@@ -261,8 +282,10 @@ predicate VF_reordeReadyList__ghost_args(list<void*> tasks,
 void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
 /*@ requires
         // ghost arguments
-            VF_reordeReadyList__ghost_args(?gTasks, ?gCellLists, ?gOwnerLists, ?gOffset)
+            VF_reordeReadyList__ghost_args(?gTasks, ?gStates,
+                                           ?gCellLists, ?gOwnerLists, ?gOffset)
             &*&
+            length(gTasks) == length(gStates) &*&
             length(gCellLists) == configMAX_PRIORITIES &*&
             length(gOwnerLists) == configMAX_PRIORITIES &*&
             length(nth(0, gCellLists)) == configNUM_CORES + 1 &*&
@@ -292,14 +315,14 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
             subset(gOwners, gTasks) == true;
 @*/
 /*@ ensures 
-        readyLists_p(?gReorderedCellLists, ?gReorderedOwnerLists) &*&
+        readyLists_p(gTasks, gStates, ?gReorderedCellLists, ?gReorderedOwnerLists) &*&
         length(gReorderedCellLists) == length(gCellLists) &*&
         length(gReorderedOwnerLists) == length(gOwnerLists) &*&
         length(gReorderedCellLists) == length(gReorderedOwnerLists) &*&
         forall(gReorderedOwnerLists, (superset)(gTasks)) == true;
  @*/
 {
-    //@ open VF_reordeReadyList__ghost_args(_, _, _, _);
+    //@ open VF_reordeReadyList__ghost_args(_, _, _, _, _);
 
     // Proving `∀o ∈ gOwners. o ∈ gTasks`
         //@ forall_mem(gOwners, gOwnerLists, (superset)(gTasks));
@@ -392,11 +415,11 @@ void VF_reordeReadyList(List_t* pxReadyList, ListItem_t * pxTaskItem)
     //@ subset_implies_forall_mem(gOwners3, gTasks);
     //@ assert( forall(gOwners3, (mem_list_elem)(gTasks)) == true );
 
-    //@ closeReordered_readyLists(gCellLists, gOwnerLists, gCells3, gOwners3, gTasks);
+    //@ closeReordered_readyLists(gTasks, gStates, gCellLists, gOwnerLists, gCells3, gOwners3);
 
     // Proving that reordering preserves the length of cell lists and owner lists:
-        //@ open readyLists_p(?gReorderedCellLists, ?gReorderedOwnerLists);
-        //@ close readyLists_p(gReorderedCellLists, gReorderedOwnerLists);
+        //@ open readyLists_p(gTasks, gStates, ?gReorderedCellLists, ?gReorderedOwnerLists);
+        //@ close readyLists_p(gTasks, gStates, gReorderedCellLists, gReorderedOwnerLists);
     //@ assert( length(gReorderedCellLists) == length(gCellLists) );
     //@ assert( length(gReorderedOwnerLists) == length(gOwnerLists) );
     //@ assert( length(gReorderedCellLists) == length(gReorderedOwnerLists) );

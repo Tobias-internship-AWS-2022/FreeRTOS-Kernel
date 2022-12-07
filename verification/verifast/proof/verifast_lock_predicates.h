@@ -87,11 +87,12 @@ fixpoint int taskISRLockID_f();
 predicate taskISRLockInv_p() = _taskISRLockInv_p(_);
 
 
-// Auxiliary predicate. Equal to the lock invariant above but exposes
-// some details.
+// Auxiliary predicate for cases where we need to expose details about the state
+// of an acquired lock invariant, e.g., in a loop invariant where we don't want
+// to spell out the entire invariant.
 predicate _taskISRLockInv_p(UBaseType_t gTopReadyPriority) = 
     // Access to global variables
-        [0.5]pointer(&pxCurrentTCBs[coreID_f], ?gCurrentTCB) &*&
+        [0.5]pointer(&pxCurrentTCBs[coreID_f()], ?gCurrentTCB) &*&
         integer_((void*) &uxSchedulerSuspended, sizeof(UBaseType_t), false, _) &*&
         integer_(&xSchedulerRunning, sizeof(BaseType_t), true, _)
     &*&
@@ -123,7 +124,7 @@ predicate _taskISRLockInv_p(UBaseType_t gTopReadyPriority) =
         //             -> [1/2]shared_TCB_p(t, taskTASK_NOT_RUNNING)
             foreach(gTasks, readOnly_sharedSeg_TCB_IF_not_running_p(gTasks, gStates))
         &*&
-        readyLists_p(?gCellLists, ?gOwnerLists) 
+        readyLists_p(gTasks, gStates, ?gCellLists, ?gOwnerLists) 
         &*&
         // gTasks contains all relevant tasks
             mem(gCurrentTCB, gTasks) == true
