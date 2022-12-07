@@ -936,6 +936,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
     @*/
     {
         //@ open taskISRLockInv_p();
+        //@ open _taskISRLockInv_p(_);
         //@ assert( integer_((void*) &uxTopReadyPriority, sizeof(UBaseType_t), false, ?gTopReadyPriority0) );
         //@ assert( gTopReadyPriority0 == uxTopReadyPriority);
         UBaseType_t uxCurrentPriority = uxTopReadyPriority;
@@ -1404,6 +1405,7 @@ static void prvYieldForTask( TCB_t * pxTCB,
                 
                 // @ close readyLists_p(gCellLists2, gOwnerLists2);
                 //@ close taskISRLockInv_p();
+                //@ close _taskISRLockInv_p(_);
                 return pdFALSE;
             }
 
@@ -1512,7 +1514,6 @@ static void prvYieldForTask( TCB_t * pxTCB,
             #endif /* if ( configUSE_CORE_AFFINITY == 1 ) */
         #endif /* if ( configNUM_CORES > 1 ) */
 
-        //@ open _taskISRLockInv_p(_);
         //@ close taskISRLockInv_p();
         return pdTRUE;
     }
@@ -4622,11 +4623,13 @@ void vTaskSwitchContext( BaseType_t xCoreID )
         #endif /* VERIFAST */
 
         //@ open taskISRLockInv_p();
+        //@ open _taskISRLockInv_p(_);
         if( uxSchedulerSuspended != ( UBaseType_t ) pdFALSE )
         {
             /* The scheduler is currently suspended - do not allow a context
              * switch. */
             xYieldPendings[ xCoreID ] = pdTRUE;
+            //@ close _taskISRLockInv_p(_);
             //@ close taskISRLockInv_p();
         }
         else
@@ -4674,6 +4677,7 @@ void vTaskSwitchContext( BaseType_t xCoreID )
 
             /* Select a new task to run using either the generic C or port
              * optimised asm code. */
+            //@ close _taskISRLockInv_p(_);
             //@ close taskISRLockInv_p();
             ( void ) prvSelectHighestPriorityTask( xCoreID );
             traceTASK_SWITCHED_IN();
