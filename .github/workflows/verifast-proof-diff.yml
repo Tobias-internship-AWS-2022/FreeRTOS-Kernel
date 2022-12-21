@@ -4,8 +4,10 @@ jobs:
   proof_diff:
     runs-on:  ubuntu-latest
     steps:
-      - run: |
-          pwd
-          ls
-          ls Test/VeriFast/tasks/vTaskSwitchContext/
+      - run: pwd
+      - run: ls
+      - run: ls Test
+      - run: ls Test/VeriFast
+      - run: ls Test/VeriFast/tasks/
+      - run: ls Test/VeriFast/tasks/vTaskSwitchContext/
       - run: Test/VeriFast/tasks/vTaskSwitchContext/diff.sh `pwd`
