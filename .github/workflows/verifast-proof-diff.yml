@@ -4,6 +4,7 @@ jobs:
   proof_diff:
     runs-on:  ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - run: pwd
       - run: ls
       - run: ls Test
