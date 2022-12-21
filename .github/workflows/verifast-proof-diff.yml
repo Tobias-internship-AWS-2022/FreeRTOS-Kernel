@@ -1,0 +1,8 @@
+name: verifast-proof-diff
+on:   [pull_request, push]
+jobs:
+  proof_diff:
+    runs-on:  ubuntu-latest
+    steps:
+      - run: pwd
+      - run: Test/VeriFast/tasks/vTaskSwitchContext/diff.sh `pwd`
