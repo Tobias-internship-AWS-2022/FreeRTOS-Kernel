@@ -5,10 +5,4 @@ jobs:
     runs-on:  ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: pwd
-      - run: ls
-      - run: ls Test
-      - run: ls Test/VeriFast
-      - run: ls Test/VeriFast/tasks/
-      - run: ls Test/VeriFast/tasks/vTaskSwitchContext/
       - run: Test/VeriFast/tasks/vTaskSwitchContext/diff.sh `pwd`
