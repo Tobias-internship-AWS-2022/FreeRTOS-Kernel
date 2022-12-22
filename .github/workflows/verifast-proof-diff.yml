@@ -1,5 +1,5 @@
 name: verifast-proof-diff
-on:   [pull_request, push]
+on:   [pull_request]
 jobs:
   proof_diff:
     runs-on:  ubuntu-latest
